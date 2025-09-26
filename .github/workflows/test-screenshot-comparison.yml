@@ -1,0 +1,44 @@
+name: Test Screenshot Comparison
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_url:
+        description: 'URL to test screenshot comparison with'
+        required: true
+        type: string
+        default: 'https://example.com'
+      threshold:
+        description: 'Difference threshold percentage'
+        required: false
+        type: number
+        default: 20
+      environment:
+        description: 'Environment name'
+        required: false
+        type: string
+        default: 'test-environment'
+      contract:
+        description: 'Contract name'
+        required: false
+        type: string
+        default: 'test-contract'
+      build_mode:
+        description: 'Build mode'
+        required: false
+        type: string
+        default: 'Test'
+
+jobs:
+  test-screenshot-comparison:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Screenshot Comparison
+        uses: ./.github/workflows/screenshot-comparison-advanced.yml
+        with:
+          deploy_url: ${{ inputs.test_url }}
+          environment: ${{ inputs.environment }}
+          contract_name: ${{ inputs.contract }}
+          build_mode: ${{ inputs.build_mode }}
+          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          threshold: ${{ inputs.threshold }}

@@ -1,0 +1,407 @@
+name: Advanced Screenshot Comparison
+
+on:
+  workflow_call:
+    inputs:
+      deploy_url:
+        description: 'URL to take screenshot of'
+        required: true
+        type: string
+      environment:
+        description: 'Environment name for artifact storage'
+        required: true
+        type: string
+      contract_name:
+        description: 'Contract name for artifact storage'
+        required: true
+        type: string
+      build_mode:
+        description: 'Build mode for artifact storage'
+        required: true
+        type: string
+      slack_webhook_url:
+        description: 'Slack webhook URL for notifications'
+        required: true
+        type: string
+      threshold:
+        description: 'Difference threshold percentage (default 20)'
+        required: false
+        type: number
+        default: 20
+
+jobs:
+  screenshot-comparison:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          npm install playwright pixelmatch pngjs
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting 30 seconds for deployment to be ready..."
+          sleep 30
+
+      - name: Take screenshot
+        run: |
+          mkdir -p screenshots
+          node -e "
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+            await page.setViewportSize({ width: 1920, height: 1080 });
+            await page.goto('${{ inputs.deploy_url }}', { waitUntil: 'networkidle' });
+            await page.waitForTimeout(5000);
+            await page.screenshot({ 
+              path: 'screenshots/current-${{ github.run_number }}.png',
+              fullPage: true 
+            });
+            await browser.close();
+          })();
+          "
+
+      - name: Download previous screenshot
+        id: download-previous
+        continue-on-error: true
+        run: |
+          # Try to download the most recent screenshot from artifacts
+          gh run download --repo ${{ github.repository }} --name "screenshot-${{ github.run_number-1 }}" || echo "No previous screenshot found"
+          if [ -f "screenshots/current-${{ github.run_number-1 }}.png" ]; then
+            mv "screenshots/current-${{ github.run_number-1 }}.png" "screenshots/previous.png"
+            echo "previous_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "previous_exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compare screenshots
+        id: compare
+        if: steps.download-previous.outputs.previous_exists == 'true'
+        run: |
+          node -e "
+          const fs = require('fs');
+          const PNG = require('pngjs').PNG;
+          const pixelmatch = require('pixelmatch');
+          
+          const img1 = PNG.sync.read(fs.readFileSync('screenshots/previous.png'));
+          const img2 = PNG.sync.read(fs.readFileSync('screenshots/current-${{ github.run_number }}.png'));
+          
+          const { width, height } = img1;
+          const diff = new PNG({ width, height });
+          
+          const numDiffPixels = pixelmatch(img1.data, img2.data, diff.data, width, height, {
+            threshold: 0.1,
+            alpha: 0.1,
+            diffColor: [255, 0, 0],
+            diffColorAlt: [0, 255, 0]
+          });
+          
+          const totalPixels = width * height;
+          const diffPercent = Math.round((numDiffPixels / totalPixels) * 100);
+          
+          fs.writeFileSync('screenshots/diff.png', PNG.sync.write(diff));
+          
+          console.log('DIFF_PERCENT=' + diffPercent);
+          console.log('HAS_DIFFERENCE=' + (diffPercent > 0));
+          " >> $GITHUB_OUTPUT
+
+      - name: Check threshold
+        id: threshold-check
+        if: steps.download-previous.outputs.previous_exists == 'true'
+        run: |
+          DIFF_PERCENT=$(grep "DIFF_PERCENT=" $GITHUB_OUTPUT | cut -d'=' -f2)
+          if [ "$DIFF_PERCENT" -gt "${{ inputs.threshold }}" ]; then
+            echo "exceeds_threshold=true" >> $GITHUB_OUTPUT
+          else
+            echo "exceeds_threshold=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send Slack notification
+        if: steps.download-previous.outputs.previous_exists == 'true' && steps.threshold-check.outputs.exceeds_threshold == 'true'
+        run: |
+          DIFF_PERCENT=$(grep "DIFF_PERCENT=" $GITHUB_OUTPUT | cut -d'=' -f2)
+          
+          # Send main notification
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"text\": \"🚨 Screenshot Comparison Alert\",
+              \"blocks\": [
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \"*Screenshot Comparison Alert*\n\n*Environment:* ${{ inputs.environment }}\n*Contract:* ${{ inputs.contract_name }}\n*Build Mode:* ${{ inputs.build_mode }}\n*Deploy URL:* ${{ inputs.deploy_url }}\n*Difference:* ${DIFF_PERCENT}% (threshold: ${{ inputs.threshold }}%)\n\n⚠️ The homepage screenshot differs significantly from the previous deployment.\"
+                  }
+                },
+                {
+                  \"type\": \"actions\",
+                  \"elements\": [
+                    {
+                      \"type\": \"button\",
+                      \"text\": {
+                        \"type\": \"plain_text\",
+                        \"text\": \"View Deployment\"
+                      },
+                      \"url\": \"${{ inputs.deploy_url }}\"
+                    }
+                  ]
+                }
+              ]
+            }" \
+            "${{ inputs.slack_webhook_url }}"
+          
+          # Send HTML report notification
+          echo "📸 Sending HTML report notification to Slack..."
+          
+          # Send notification about the HTML report
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"text\": \"📸 Screenshot Comparison Report - ${{ inputs.environment }} (${{ inputs.contract_name }})\",
+              \"blocks\": [
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \"*Screenshot Comparison Report Generated*\n\nA detailed HTML report has been created showing the visual differences between deployments.\n\n*Report includes:*\n• Side-by-side screenshot comparison\n• Visual difference overlay\n• Detailed metrics and analysis\n• Interactive legend and explanations\"
+                  }
+                },
+                {
+                  \"type\": \"actions\",
+                  \"elements\": [
+                    {
+                      \"type\": \"button\",
+                      \"text\": {
+                        \"type\": \"plain_text\",
+                        \"text\": \"View Report\"
+                      },
+                      \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
+                      \"style\": \"primary\"
+                    },
+                    {
+                      \"type\": \"button\",
+                      \"text\": {
+                        \"type\": \"plain_text\",
+                        \"text\": \"View Deployment\"
+                      },
+                      \"url\": \"${{ inputs.deploy_url }}\"
+                    }
+                  ]
+                },
+                {
+                  \"type\": \"context\",
+                  \"elements\": [
+                    {
+                      \"type\": \"mrkdwn\",
+                      \"text\": \"Difference: ${DIFF_PERCENT}% | Threshold: ${{ inputs.threshold }}% | Check Actions artifacts for HTML report\"
+                    }
+                  ]
+                }
+              ]
+            }" \
+            "${{ inputs.slack_webhook_url }}"
+
+      - name: Upload current screenshot as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-${{ github.run_number }}
+          path: screenshots/current-${{ github.run_number }}.png
+          retention-days: 30
+
+      - name: Generate HTML report
+        if: steps.download-previous.outputs.previous_exists == 'true' && steps.threshold-check.outputs.exceeds_threshold == 'true'
+        run: |
+          # Create report directory
+          mkdir -p screenshot-report
+          
+          # Copy screenshots to report directory
+          cp screenshots/previous.png screenshot-report/previous.png 2>/dev/null || echo "No previous screenshot"
+          cp screenshots/current-${{ github.run_number }}.png screenshot-report/current.png 2>/dev/null || echo "No current screenshot"
+          cp screenshots/diff.png screenshot-report/diff.png 2>/dev/null || echo "No diff image"
+          
+          # Generate HTML report
+          cat > screenshot-report/report-${{ github.run_number }}.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Screenshot Comparison Report</title>
+              <style>
+                  * { margin: 0; padding: 0; box-sizing: border-box; }
+                  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #e6edf3; line-height: 1.6; }
+                  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+                  .header { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+                  .title { font-size: 24px; font-weight: 600; margin-bottom: 10px; color: #f0f6fc; }
+                  .subtitle { color: #8b949e; font-size: 14px; }
+                  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+                  .summary-item { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 15px; text-align: center; }
+                  .summary-label { font-size: 12px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+                  .summary-value { font-size: 18px; font-weight: 600; }
+                  .status-exceeded { color: #f85149; }
+                  .comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+                  .screenshot-container { background: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+                  .screenshot-header { background: #21262d; padding: 12px 16px; border-bottom: 1px solid #30363d; font-weight: 500; }
+                  .screenshot-image { width: 100%; height: auto; display: block; }
+                  .diff-container { background: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
+                  .diff-header { background: #21262d; padding: 12px 16px; border-bottom: 1px solid #30363d; font-weight: 500; color: #f85149; }
+                  .details { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; }
+                  .details h3 { margin-bottom: 15px; color: #f0f6fc; }
+                  .details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
+                  .detail-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #21262d; }
+                  .detail-label { color: #8b949e; }
+                  .detail-value { font-weight: 500; }
+                  .legend { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; margin-top: 20px; }
+                  .legend h4 { margin-bottom: 10px; color: #f0f6fc; }
+                  .legend-item { display: flex; align-items: center; margin-bottom: 8px; }
+                  .legend-color { width: 20px; height: 20px; border-radius: 3px; margin-right: 10px; }
+                  .legend-red { background: #f85149; }
+                  .legend-green { background: #3fb950; }
+                  .legend-gray { background: #6e7681; }
+                  @media (max-width: 768px) { .comparison-grid { grid-template-columns: 1fr; } .summary { grid-template-columns: repeat(2, 1fr); } }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <div class="header">
+                      <h1 class="title">Screenshot Comparison Report</h1>
+                      <p class="subtitle">Generated on $(date)</p>
+                  </div>
+                  
+                  <div class="summary">
+                      <div class="summary-item">
+                          <div class="summary-label">Environment</div>
+                          <div class="summary-value">${{ inputs.environment }}</div>
+                      </div>
+                      <div class="summary-item">
+                          <div class="summary-label">Contract</div>
+                          <div class="summary-value">${{ inputs.contract_name }}</div>
+                      </div>
+                      <div class="summary-item">
+                          <div class="summary-label">Build Mode</div>
+                          <div class="summary-value">${{ inputs.build_mode }}</div>
+                      </div>
+                      <div class="summary-item">
+                          <div class="summary-label">Difference</div>
+                          <div class="summary-value status-exceeded">$(grep "DIFF_PERCENT=" $GITHUB_OUTPUT | cut -d'=' -f2)%</div>
+                      </div>
+                      <div class="summary-item">
+                          <div class="summary-label">Threshold</div>
+                          <div class="summary-value">${{ inputs.threshold }}%</div>
+                      </div>
+                      <div class="summary-item">
+                          <div class="summary-label">Status</div>
+                          <div class="summary-value status-exceeded">⚠️ EXCEEDS THRESHOLD</div>
+                      </div>
+                  </div>
+                  
+                  <div class="comparison-grid">
+                      <div class="screenshot-container">
+                          <div class="screenshot-header">Previous Screenshot</div>
+                          <img src="previous.png" alt="Previous Screenshot" class="screenshot-image">
+                      </div>
+                      <div class="screenshot-container">
+                          <div class="screenshot-header">Current Screenshot</div>
+                          <img src="current.png" alt="Current Screenshot" class="screenshot-image">
+                      </div>
+                  </div>
+                  
+                  <div class="diff-container">
+                      <div class="diff-header">Visual Difference</div>
+                      <img src="diff.png" alt="Difference Visualization" class="screenshot-image">
+                  </div>
+                  
+                  <div class="details">
+                      <h3>Comparison Details</h3>
+                      <div class="details-grid">
+                          <div class="detail-item">
+                              <span class="detail-label">Deploy URL:</span>
+                              <span class="detail-value"><a href="${{ inputs.deploy_url }}" target="_blank" style="color: #58a6ff;">${{ inputs.deploy_url }}</a></span>
+                          </div>
+                          <div class="detail-item">
+                              <span class="detail-label">Difference Percentage:</span>
+                              <span class="detail-value">$(grep "DIFF_PERCENT=" $GITHUB_OUTPUT | cut -d'=' -f2)%</span>
+                          </div>
+                          <div class="detail-item">
+                              <span class="detail-label">Threshold:</span>
+                              <span class="detail-value">${{ inputs.threshold }}%</span>
+                          </div>
+                          <div class="detail-item">
+                              <span class="detail-label">Exceeds Threshold:</span>
+                              <span class="detail-value">Yes</span>
+                          </div>
+                      </div>
+                  </div>
+                  
+                  <div class="legend">
+                      <h4>Difference Image Legend</h4>
+                      <div class="legend-item">
+                          <div class="legend-color legend-red"></div>
+                          <span>Significant changes (different pixels)</span>
+                      </div>
+                      <div class="legend-item">
+                          <div class="legend-color legend-green"></div>
+                          <span>Minor differences (similar pixels)</span>
+                      </div>
+                      <div class="legend-item">
+                          <div class="legend-color legend-gray"></div>
+                          <span>Identical pixels (no change)</span>
+                      </div>
+                  </div>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload HTML report
+        if: steps.download-previous.outputs.previous_exists == 'true' && steps.threshold-check.outputs.exceeds_threshold == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-report-${{ github.run_number }}
+          path: screenshot-report/
+          retention-days: 30
+
+      - name: Upload difference image (if exists)
+        if: steps.download-previous.outputs.previous_exists == 'true' && steps.threshold-check.outputs.exceeds_threshold == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-diff-${{ github.run_number }}
+          path: screenshots/diff.png
+          retention-days: 30
+
+      - name: Summary
+        run: |
+          echo "## Screenshot Comparison Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Contract:** ${{ inputs.contract_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Mode:** ${{ inputs.build_mode }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deploy URL:** ${{ inputs.deploy_url }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.download-previous.outputs.previous_exists }}" == "true" ]; then
+            DIFF_PERCENT=$(grep "DIFF_PERCENT=" $GITHUB_OUTPUT | cut -d'=' -f2)
+            echo "- **Previous Screenshot:** Found" >> $GITHUB_STEP_SUMMARY
+            echo "- **Difference:** ${DIFF_PERCENT}%" >> $GITHUB_STEP_SUMMARY
+            echo "- **Threshold:** ${{ inputs.threshold }}%" >> $GITHUB_STEP_SUMMARY
+            
+            if [ "${{ steps.threshold-check.outputs.exceeds_threshold }}" == "true" ]; then
+              echo "- **Status:** ⚠️ **EXCEEDS THRESHOLD**" >> $GITHUB_STEP_SUMMARY
+              echo "- **Slack Notification:** Sent" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- **Status:** ✅ Within threshold" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "- **Previous Screenshot:** Not found (first deployment)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status:** ℹ️ Baseline screenshot created" >> $GITHUB_STEP_SUMMARY
+          fi

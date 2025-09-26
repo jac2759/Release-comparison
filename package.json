@@ -1,0 +1,23 @@
+{
+  "name": "release-comparison-test",
+  "version": "1.0.0",
+  "description": "Test repository for screenshot comparison workflow",
+  "type": "module",
+  "scripts": {
+    "test": "echo 'Run the GitHub workflow to test screenshot comparison'",
+    "serve": "python -m http.server 8000",
+    "serve-node": "npx serve ."
+  },
+  "keywords": [
+    "screenshot",
+    "comparison",
+    "testing",
+    "github-actions",
+    "workflow"
+  ],
+  "author": "Your Team",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "^14.2.1"
+  }
+}
