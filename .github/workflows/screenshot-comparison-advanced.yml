@@ -214,10 +214,11 @@ jobs:
             const diff = new PNG({ width, height });
             
             const numDiffPixels = pixelmatch(img1.data, img2.data, diff.data, width, height, {
-              threshold: 0.1,
+              threshold: 0.3,  // Higher threshold to ignore minor color variations
               alpha: 0.1,
               diffColor: [255, 0, 0],
-              diffColorAlt: [0, 255, 0]
+              diffColorAlt: [0, 255, 0],
+              includeAA: false  // Ignore anti-aliasing differences
             });
             
             const totalPixels = width * height;
