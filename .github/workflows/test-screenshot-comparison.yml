@@ -38,5 +38,5 @@ jobs:
       environment: ${{ matrix.environment }}
       contract_name: ${{ matrix.contract }}
       build_mode: ${{ inputs.build_mode || 'Test' }}
-          threshold: ${{ inputs.threshold || 50 }}
+      threshold: ${{ inputs.threshold || 50 }}
 # Updated Mon Sep 29 10:27:15 BST 2025
