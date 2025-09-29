@@ -81,9 +81,9 @@ jobs:
           gh run download --repo ${{ github.repository }} --name "screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}" || echo "No previous screenshot found"
           
           if [ -f "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" ]; then
-            mv "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" "screenshots/previous.png"
+            mv "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" "screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
             echo "previous_exists=true" >> $GITHUB_OUTPUT
-            echo "Previous screenshot found and renamed to previous.png"
+            echo "Previous screenshot found and renamed to previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
           else
             echo "previous_exists=false" >> $GITHUB_OUTPUT
             echo "Previous screenshot file not found - this will be the baseline"
@@ -100,7 +100,7 @@ jobs:
           const PNG = require('pngjs').PNG;
           const pixelmatch = require('pixelmatch');
           
-          const img1 = PNG.sync.read(fs.readFileSync('screenshots/previous.png'));
+          const img1 = PNG.sync.read(fs.readFileSync('screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png'));
           const img2 = PNG.sync.read(fs.readFileSync('screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png'));
           
           const { width, height } = img1;
@@ -231,7 +231,7 @@ jobs:
           mkdir -p screenshot-report
           
           # Copy screenshots to report directory
-          cp screenshots/previous.png screenshot-report/previous.png 2>/dev/null || echo "No previous screenshot"
+          cp screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png screenshot-report/previous.png 2>/dev/null || echo "No previous screenshot"
           cp screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png screenshot-report/current.png 2>/dev/null || echo "No current screenshot"
           cp screenshots/diff.png screenshot-report/diff.png 2>/dev/null || echo "No diff image"
           
