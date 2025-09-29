@@ -31,12 +31,13 @@ jobs:
             environment: test-environment
             build_mode: Test
     uses: ./.github/workflows/screenshot-comparison-advanced.yml
-    secrets: inherit
     with:
       deploy_url: ${{ matrix.deploy_url }}
       environment: ${{ matrix.environment }}
       contract_name: ${{ matrix.contract }}
       build_mode: ${{ inputs.build_mode || 'Test' }}
-      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
       threshold: ${{ inputs.threshold || 10 }}
+
+    secrets:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 # Updated Mon Sep 29 11:30:00 BST 2025
