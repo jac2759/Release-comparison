@@ -227,7 +227,11 @@ jobs:
             
             console.log('DIFF_PERCENT=' + diffPercent);
             console.log('HAS_DIFFERENCE=' + (diffPercent > 0));
-          " | tee -a $GITHUB_OUTPUT
+          " > comparison_output.txt
+          
+          # Read the output and append to GITHUB_OUTPUT
+          cat comparison_output.txt >> $GITHUB_OUTPUT
+          cat comparison_output.txt
 
       - name: Check threshold
         id: threshold-check
