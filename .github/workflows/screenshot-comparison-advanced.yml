@@ -125,8 +125,8 @@ jobs:
           # Try to download the artifact from the most recent completed run
           echo "Attempting download command:"
           
-          # Get the most recent completed run ID that has our screenshot artifact
-          PREVIOUS_RUN_ID=$(gh run list --repo ${{ github.repository }} --status completed --limit 10 --json databaseId,workflowName --jq '.[] | select(.workflowName == "Test Screenshot Comparison") | .databaseId' | head -1 2>/dev/null || echo "")
+          # Get the most recent successful run ID that has our screenshot artifact
+          PREVIOUS_RUN_ID=$(gh run list --repo ${{ github.repository }} --status success --limit 10 --json databaseId,workflowName --jq '.[] | select(.workflowName == "Test Screenshot Comparison") | .databaseId' | head -1 2>/dev/null || echo "")
           
           if [ -n "$PREVIOUS_RUN_ID" ]; then
             echo "Downloading from previous run: $PREVIOUS_RUN_ID"
