@@ -1,6 +1,10 @@
 name: Test Screenshot Comparison
 
 on:
+  release:
+    types:
+      - published
+
   workflow_dispatch:
     inputs:
       test_url:
@@ -30,15 +34,22 @@ on:
         default: 'Test'
 
 jobs:
-  test-screenshot-comparison:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Test Screenshot Comparison
-        uses: ./.github/workflows/screenshot-comparison-advanced.yml
-        with:
-          deploy_url: ${{ inputs.test_url }}
-          environment: ${{ inputs.environment }}
-          contract_name: ${{ inputs.contract }}
-          build_mode: ${{ inputs.build_mode }}
-          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          threshold: ${{ inputs.threshold }}
+  screenshot-comparison:
+    strategy:
+      matrix:
+        contract:
+          - test
+        include:
+          - contract: test
+            deploy_url: https://jac2759.github.io/Release-comparison/
+            environment: test-environment
+            build_mode: Test
+    uses: ./.github/workflows/screenshot-comparison-advanced.yml
+    secrets: inherit
+    with:
+      deploy_url: ${{ matrix.deploy_url }}
+      environment: ${{ matrix.environment }}
+      contract_name: ${{ matrix.contract }}
+      build_mode: ${{ matrix.build_mode }}
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+      threshold: 20
