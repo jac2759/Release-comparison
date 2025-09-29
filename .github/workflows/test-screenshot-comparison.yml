@@ -7,26 +7,11 @@ on:
 
   workflow_dispatch:
     inputs:
-      test_url:
-        description: 'URL to test screenshot comparison with'
-        required: true
-        type: string
-        default: 'https://example.com'
       threshold:
         description: 'Difference threshold percentage'
         required: false
         type: number
         default: 20
-      environment:
-        description: 'Environment name'
-        required: false
-        type: string
-        default: 'test-environment'
-      contract:
-        description: 'Contract name'
-        required: false
-        type: string
-        default: 'test-contract'
       build_mode:
         description: 'Build mode'
         required: false
@@ -50,6 +35,6 @@ jobs:
       deploy_url: ${{ matrix.deploy_url }}
       environment: ${{ matrix.environment }}
       contract_name: ${{ matrix.contract }}
-      build_mode: ${{ matrix.build_mode }}
+      build_mode: ${{ inputs.build_mode }}
       slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
-      threshold: 20
+      threshold: ${{ inputs.threshold }}
