@@ -65,7 +65,7 @@ jobs:
             await page.goto('${{ inputs.deploy_url }}', { waitUntil: 'networkidle' });
             await page.waitForTimeout(5000);
             await page.screenshot({ 
-              path: 'screenshots/current-${{ github.run_number }}.png',
+              path: 'screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png',
               fullPage: true 
             });
             await browser.close();
@@ -76,24 +76,17 @@ jobs:
         id: download-previous
         continue-on-error: true
         run: |
-          # Skip if this is the first run (run_number = 1)
-          if [ "${{ github.run_number }}" -eq 1 ]; then
-            echo "previous_exists=false" >> $GITHUB_OUTPUT
-            echo "This is the first run, no previous screenshot to compare"
-            exit 0
-          fi
-          
           # Try to download the previous screenshot from artifacts
-          echo "Looking for previous screenshot from run ${{ github.run_number-1 }}"
-          gh run download --repo ${{ github.repository }} --name "screenshot-${{ github.run_number-1 }}" || echo "No previous screenshot found"
+          echo "Looking for previous screenshot: ${{ inputs.contract_name }}_${{ inputs.build_mode }}"
+          gh run download --repo ${{ github.repository }} --name "screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}" || echo "No previous screenshot found"
           
-          if [ -f "screenshots/current-${{ github.run_number-1 }}.png" ]; then
-            mv "screenshots/current-${{ github.run_number-1 }}.png" "screenshots/previous.png"
+          if [ -f "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" ]; then
+            mv "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" "screenshots/previous.png"
             echo "previous_exists=true" >> $GITHUB_OUTPUT
             echo "Previous screenshot found and renamed to previous.png"
           else
             echo "previous_exists=false" >> $GITHUB_OUTPUT
-            echo "Previous screenshot file not found"
+            echo "Previous screenshot file not found - this will be the baseline"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -108,7 +101,7 @@ jobs:
           const pixelmatch = require('pixelmatch');
           
           const img1 = PNG.sync.read(fs.readFileSync('screenshots/previous.png'));
-          const img2 = PNG.sync.read(fs.readFileSync('screenshots/current-${{ github.run_number }}.png'));
+          const img2 = PNG.sync.read(fs.readFileSync('screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png'));
           
           const { width, height } = img1;
           const diff = new PNG({ width, height });
@@ -227,8 +220,8 @@ jobs:
       - name: Upload current screenshot as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: screenshot-${{ github.run_number }}
-          path: screenshots/current-${{ github.run_number }}.png
+          name: screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}
+          path: screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png
           retention-days: 30
 
       - name: Generate HTML report
@@ -239,7 +232,7 @@ jobs:
           
           # Copy screenshots to report directory
           cp screenshots/previous.png screenshot-report/previous.png 2>/dev/null || echo "No previous screenshot"
-          cp screenshots/current-${{ github.run_number }}.png screenshot-report/current.png 2>/dev/null || echo "No current screenshot"
+          cp screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png screenshot-report/current.png 2>/dev/null || echo "No current screenshot"
           cp screenshots/diff.png screenshot-report/diff.png 2>/dev/null || echo "No diff image"
           
           # Generate HTML report
