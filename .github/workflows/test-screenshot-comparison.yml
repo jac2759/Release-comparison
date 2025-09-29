@@ -21,6 +21,7 @@ on:
 
 jobs:
   screenshot-comparison:
+    environment: test-environment
     strategy:
       matrix:
         contract:
