@@ -37,6 +37,6 @@ jobs:
       deploy_url: ${{ matrix.deploy_url }}
       environment: ${{ matrix.environment }}
       contract_name: ${{ matrix.contract }}
-      build_mode: ${{ inputs.build_mode }}
-      threshold: ${{ inputs.threshold }}
+      build_mode: ${{ inputs.build_mode || 'Test' }}
+      threshold: ${{ inputs.threshold || 20 }}
 # Updated Mon Sep 29 10:27:15 BST 2025
