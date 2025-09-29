@@ -233,22 +233,32 @@ jobs:
           # Read the output and append to GITHUB_OUTPUT
           cat comparison_output.txt >> $GITHUB_OUTPUT
           cat comparison_output.txt
+          
+          # Extract values for step outputs
+          DIFF_PERCENT=$(grep "DIFF_PERCENT=" comparison_output.txt | cut -d'=' -f2)
+          HAS_DIFFERENCE=$(grep "HAS_DIFFERENCE=" comparison_output.txt | cut -d'=' -f2)
+          
+          echo "diff_percent=$DIFF_PERCENT" >> $GITHUB_OUTPUT
+          echo "has_difference=$HAS_DIFFERENCE" >> $GITHUB_OUTPUT
 
       - name: Check threshold
         id: threshold-check
         if: steps.download-previous.outputs.previous_exists == 'true'
         run: |
-          DIFF_PERCENT=$(grep "DIFF_PERCENT=" $GITHUB_OUTPUT | cut -d'=' -f2)
+          DIFF_PERCENT="${{ steps.compare.outputs.diff_percent }}"
+          echo "Checking threshold: $DIFF_PERCENT% vs ${{ inputs.threshold }}%"
           if [ "$DIFF_PERCENT" -gt "${{ inputs.threshold }}" ]; then
             echo "exceeds_threshold=true" >> $GITHUB_OUTPUT
+            echo "Threshold exceeded: $DIFF_PERCENT% > ${{ inputs.threshold }}%"
           else
             echo "exceeds_threshold=false" >> $GITHUB_OUTPUT
+            echo "Within threshold: $DIFF_PERCENT% <= ${{ inputs.threshold }}%"
           fi
 
       - name: Send Slack notification
         if: steps.download-previous.outputs.previous_exists == 'true' && steps.threshold-check.outputs.exceeds_threshold == 'true'
         run: |
-          DIFF_PERCENT=$(grep "DIFF_PERCENT=" $GITHUB_OUTPUT | cut -d'=' -f2)
+          DIFF_PERCENT="${{ steps.compare.outputs.diff_percent }}"
           
           # Send main notification
           curl -X POST -H 'Content-type: application/json' \
@@ -506,7 +516,7 @@ jobs:
           echo "- **Deploy URL:** ${{ inputs.deploy_url }}" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ steps.download-previous.outputs.previous_exists }}" == "true" ]; then
-            DIFF_PERCENT=$(grep "DIFF_PERCENT=" $GITHUB_OUTPUT | cut -d'=' -f2)
+            DIFF_PERCENT="${{ steps.compare.outputs.diff_percent }}"
             echo "- **Previous Screenshot:** Found" >> $GITHUB_STEP_SUMMARY
             echo "- **Difference:** ${DIFF_PERCENT}%" >> $GITHUB_STEP_SUMMARY
             echo "- **Threshold:** ${{ inputs.threshold }}%" >> $GITHUB_STEP_SUMMARY
