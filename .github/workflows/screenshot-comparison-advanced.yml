@@ -214,20 +214,49 @@ jobs:
             const diff = new PNG({ width, height });
             
             const numDiffPixels = pixelmatch(img1.data, img2.data, diff.data, width, height, {
-              threshold: 0.3,  // Higher threshold to ignore minor color variations
+              threshold: 0.1,  // Lower threshold to detect theme color changes
               alpha: 0.1,
-              diffColor: [255, 0, 0],
-              diffColorAlt: [0, 255, 0],
+              diffColor: [255, 0, 255],      // Magenta for theme changes (high contrast)
+              diffColorAlt: [0, 255, 255],   // Cyan for layout changes (high contrast)
               includeAA: false  // Ignore anti-aliasing differences
             });
             
             const totalPixels = width * height;
             const diffPercent = Math.round((numDiffPixels / totalPixels) * 100);
             
+            // Analyze the type of differences
+            let themeChangeDetected = false;
+            let significantLayoutChange = false;
+            
+            // Check for theme changes by analyzing color distribution
+            const colorChanges = new Map();
+            for (let i = 0; i < diff.data.length; i += 4) {
+              if (diff.data[i] > 0 || diff.data[i + 1] > 0 || diff.data[i + 2] > 0) {
+                const r = diff.data[i];
+                const g = diff.data[i + 1];
+                const b = diff.data[i + 2];
+                const colorKey = `${r},${g},${b}`;
+                colorChanges.set(colorKey, (colorChanges.get(colorKey) || 0) + 1);
+              }
+            }
+            
+            // If we have many similar color changes, it's likely a theme change
+            const maxColorCount = Math.max(...colorChanges.values());
+            if (maxColorCount > totalPixels * 0.01) { // More than 1% of pixels with same color change
+              themeChangeDetected = true;
+            }
+            
+            // If difference is high but not a theme change, it's likely a layout change
+            if (diffPercent > 5 && !themeChangeDetected) {
+              significantLayoutChange = true;
+            }
+            
             fs.writeFileSync('screenshots/diff.png', PNG.sync.write(diff));
             
             console.log('DIFF_PERCENT=' + diffPercent);
             console.log('HAS_DIFFERENCE=' + (diffPercent > 0));
+            console.log('THEME_CHANGE_DETECTED=' + themeChangeDetected);
+            console.log('SIGNIFICANT_LAYOUT_CHANGE=' + significantLayoutChange);
           " > comparison_output.txt
           
           # Read the output and append to GITHUB_OUTPUT
@@ -237,17 +266,31 @@ jobs:
           # Extract values for step outputs
           DIFF_PERCENT=$(grep "DIFF_PERCENT=" comparison_output.txt | cut -d'=' -f2)
           HAS_DIFFERENCE=$(grep "HAS_DIFFERENCE=" comparison_output.txt | cut -d'=' -f2)
+          THEME_CHANGE=$(grep "THEME_CHANGE_DETECTED=" comparison_output.txt | cut -d'=' -f2)
+          LAYOUT_CHANGE=$(grep "SIGNIFICANT_LAYOUT_CHANGE=" comparison_output.txt | cut -d'=' -f2)
           
           echo "diff_percent=$DIFF_PERCENT" >> $GITHUB_OUTPUT
           echo "has_difference=$HAS_DIFFERENCE" >> $GITHUB_OUTPUT
+          echo "theme_change_detected=$THEME_CHANGE" >> $GITHUB_OUTPUT
+          echo "significant_layout_change=$LAYOUT_CHANGE" >> $GITHUB_OUTPUT
 
       - name: Check threshold
         id: threshold-check
         if: steps.download-previous.outputs.previous_exists == 'true'
         run: |
           DIFF_PERCENT="${{ steps.compare.outputs.diff_percent }}"
+          THEME_CHANGE="${{ steps.compare.outputs.theme_change_detected }}"
+          LAYOUT_CHANGE="${{ steps.compare.outputs.significant_layout_change }}"
+          
           echo "Checking threshold: $DIFF_PERCENT% vs ${{ inputs.threshold }}%"
-          if [ "$DIFF_PERCENT" -gt "${{ inputs.threshold }}" ]; then
+          echo "Theme change detected: $THEME_CHANGE"
+          echo "Layout change detected: $LAYOUT_CHANGE"
+          
+          # Fail if theme change is detected (regardless of percentage)
+          if [ "$THEME_CHANGE" == "true" ]; then
+            echo "exceeds_threshold=true" >> $GITHUB_OUTPUT
+            echo "FAIL: Theme change detected - this should not happen!"
+          elif [ "$DIFF_PERCENT" -gt "${{ inputs.threshold }}" ]; then
             echo "exceeds_threshold=true" >> $GITHUB_OUTPUT
             echo "Threshold exceeded: $DIFF_PERCENT% > ${{ inputs.threshold }}%"
           else
@@ -259,17 +302,34 @@ jobs:
         if: steps.download-previous.outputs.previous_exists == 'true' && steps.threshold-check.outputs.exceeds_threshold == 'true'
         run: |
           DIFF_PERCENT="${{ steps.compare.outputs.diff_percent }}"
+          THEME_CHANGE="${{ steps.compare.outputs.theme_change_detected }}"
+          LAYOUT_CHANGE="${{ steps.compare.outputs.significant_layout_change }}"
+          
+          # Determine alert type and message
+          if [ "$THEME_CHANGE" == "true" ]; then
+            ALERT_EMOJI="🎨"
+            ALERT_TYPE="THEME CHANGE DETECTED"
+            ALERT_MESSAGE="A theme change has been detected! This should not happen in production."
+          elif [ "$LAYOUT_CHANGE" == "true" ]; then
+            ALERT_EMOJI="📐"
+            ALERT_TYPE="LAYOUT CHANGE DETECTED"
+            ALERT_MESSAGE="Significant layout changes detected."
+          else
+            ALERT_EMOJI="📊"
+            ALERT_TYPE="VISUAL CHANGE DETECTED"
+            ALERT_MESSAGE="Visual differences detected."
+          fi
           
           # Send main notification
           curl -X POST -H 'Content-type: application/json' \
             --data "{
-              \"text\": \"🚨 Screenshot Comparison Alert\",
+              \"text\": \"$ALERT_EMOJI $ALERT_TYPE\",
               \"blocks\": [
                 {
                   \"type\": \"section\",
                   \"text\": {
                     \"type\": \"mrkdwn\",
-                    \"text\": \"*Screenshot Comparison Alert*\n\n*Environment:* ${{ inputs.environment }}\n*Contract:* ${{ inputs.contract_name }}\n*Build Mode:* ${{ inputs.build_mode }}\n*Deploy URL:* ${{ inputs.deploy_url }}\n*Difference:* ${DIFF_PERCENT}% (threshold: ${{ inputs.threshold }}%)\n\n⚠️ The homepage screenshot differs significantly from the previous deployment.\"
+                    \"text\": \"*$ALERT_TYPE*\n\n*Environment:* ${{ inputs.environment }}\n*Contract:* ${{ inputs.contract_name }}\n*Build Mode:* ${{ inputs.build_mode }}\n*Deploy URL:* ${{ inputs.deploy_url }}\n*Difference:* ${DIFF_PERCENT}% (threshold: ${{ inputs.threshold }}%)\n*Change Type:* $ALERT_MESSAGE\n\n⚠️ The homepage screenshot differs significantly from the previous deployment.\"
                   }
                 },
                 {
