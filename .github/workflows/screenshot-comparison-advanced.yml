@@ -101,11 +101,24 @@ jobs:
           
           # Download the artifact (this will create the file if it exists)
           echo "Attempting to download artifact: screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}"
-          if gh run download --repo ${{ github.repository }} --name "screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}"; then
-            echo "Download command succeeded"
-            echo "Files after download:"
-            ls -la screenshots/ || echo "screenshots directory doesn't exist"
-            
+          
+          # Store the file count before download
+          FILE_COUNT_BEFORE=$(ls screenshots/*.png 2>/dev/null | wc -l)
+          echo "File count before download: $FILE_COUNT_BEFORE"
+          
+          # Try to download the artifact
+          gh run download --repo ${{ github.repository }} --name "screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}" || true
+          
+          # Store the file count after download
+          FILE_COUNT_AFTER=$(ls screenshots/*.png 2>/dev/null | wc -l)
+          echo "File count after download: $FILE_COUNT_AFTER"
+          
+          echo "Files after download:"
+          ls -la screenshots/ || echo "screenshots directory doesn't exist"
+          
+          # Only proceed if we actually got a new file (download was successful)
+          if [ "$FILE_COUNT_AFTER" -gt "$FILE_COUNT_BEFORE" ]; then
+            echo "Download actually succeeded - new file was added"
             # If download succeeded, rename the downloaded file to previous
             if [ -f "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" ]; then
               echo "Found downloaded file, renaming to previous..."
@@ -114,12 +127,10 @@ jobs:
               echo "Previous screenshot found and renamed to previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
             else
               echo "Download succeeded but file not found - this will be the baseline"
-              echo "Files in screenshots directory:"
-              ls -la screenshots/ || echo "screenshots directory doesn't exist"
               echo "previous_exists=false" >> $GITHUB_OUTPUT
             fi
           else
-            echo "Download command failed - no previous screenshot found"
+            echo "Download did not add any new files - no previous screenshot found"
             echo "previous_exists=false" >> $GITHUB_OUTPUT
             echo "No previous screenshot found - this will be the baseline"
           fi
