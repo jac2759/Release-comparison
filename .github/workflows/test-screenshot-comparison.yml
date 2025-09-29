@@ -1,10 +1,11 @@
 name: Test Screenshot Comparison
 
 on:
+  push:
+    branches: [ main ]
   release:
     types:
       - published
-
   workflow_dispatch:
     inputs:
       threshold:
