@@ -265,84 +265,96 @@ jobs:
         run: |
           DIFF_PERCENT="${{ steps.compare.outputs.diff_percent }}"
           
-          # Send main notification
-          curl -X POST -H 'Content-type: application/json' \
-            --data "{
-              \"text\": \"🚨 Visual Change Detected\",
-              \"blocks\": [
-                {
-                  \"type\": \"section\",
-                  \"text\": {
-                    \"type\": \"mrkdwn\",
-                    \"text\": \"*Visual Change Detected*\n\n*Environment:* ${{ inputs.environment }}\n*Contract:* ${{ inputs.contract_name }}\n*Build Mode:* ${{ inputs.build_mode }}\n*Deploy URL:* ${{ inputs.deploy_url }}\n*Difference:* ${DIFF_PERCENT}%\n\n⚠️ The homepage screenshot has changed from the previous deployment.\"
-                  }
-                },
-                {
-                  \"type\": \"actions\",
-                  \"elements\": [
-                    {
-                      \"type\": \"button\",
-                      \"text\": {
-                        \"type\": \"plain_text\",
-                        \"text\": \"View Deployment\"
-                      },
-                      \"url\": \"${{ inputs.deploy_url }}\"
-                    }
-                  ]
-                }
-              ]
-            }" \
-            "${{ secrets.SLACK_WEBHOOK_URL }}"
-          
-          # Send HTML report notification
-          echo "📸 Sending HTML report notification to Slack..."
-          
-          # Send notification about the HTML report
-          curl -X POST -H 'Content-type: application/json' \
-            --data "{
-              \"text\": \"📸 Screenshot Comparison Report - ${{ inputs.environment }} (${{ inputs.contract_name }})\",
-              \"blocks\": [
-                {
-                  \"type\": \"section\",
-                  \"text\": {
-                    \"type\": \"mrkdwn\",
-                    \"text\": \"*Screenshot Comparison Report Generated*\n\nA detailed HTML report has been created showing the visual differences between deployments.\n\n*Report includes:*\n• Side-by-side screenshot comparison\n• Visual difference overlay\n• Detailed metrics and analysis\n• Interactive legend and explanations\"
-                  }
-                },
-                {
-                  \"type\": \"actions\",
-                  \"elements\": [
-                    {
-                      \"type\": \"button\",
-                      \"text\": {
-                        \"type\": \"plain_text\",
-                        \"text\": \"View Report\"
-                      },
-                      \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
-                      \"style\": \"primary\"
-                    },
-                    {
-                      \"type\": \"button\",
-                      \"text\": {
-                        \"type\": \"plain_text\",
-                        \"text\": \"View Deployment\"
-                      },
-                      \"url\": \"${{ inputs.deploy_url }}\"
-                    }
-                  ]
-                },
-                {
-                  \"type\": \"context\",
-                  \"elements\": [
-                    {
+          # Check if Slack webhook URL is available
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            echo "📢 Sending Slack notification..."
+            
+            # Send main notification
+            curl -X POST -H 'Content-type: application/json' \
+              --data "{
+                \"text\": \"🚨 Visual Change Detected\",
+                \"blocks\": [
+                  {
+                    \"type\": \"section\",
+                    \"text\": {
                       \"type\": \"mrkdwn\",
-                      \"text\": \"Difference: ${DIFF_PERCENT}% | Threshold: ${{ inputs.threshold }}% | Check Actions artifacts for HTML report\"
+                      \"text\": \"*Visual Change Detected*\n\n*Environment:* ${{ inputs.environment }}\n*Contract:* ${{ inputs.contract_name }}\n*Build Mode:* ${{ inputs.build_mode }}\n*Deploy URL:* ${{ inputs.deploy_url }}\n*Difference:* ${DIFF_PERCENT}%\n\n⚠️ The homepage screenshot has changed from the previous deployment.\"
                     }
-                  ]
-                }
-              ]
-            }" \
-            "${{ secrets.SLACK_WEBHOOK_URL }}"
+                  },
+                  {
+                    \"type\": \"actions\",
+                    \"elements\": [
+                      {
+                        \"type\": \"button\",
+                        \"text\": {
+                          \"type\": \"plain_text\",
+                          \"text\": \"View Deployment\"
+                        },
+                        \"url\": \"${{ inputs.deploy_url }}\"
+                      }
+                    ]
+                  }
+                ]
+              }" \
+              "${{ secrets.SLACK_WEBHOOK_URL }}" || echo "Slack notification failed"
+          else
+            echo "⚠️ SLACK_WEBHOOK_URL secret not configured - skipping Slack notification"
+            echo "Visual change detected: ${DIFF_PERCENT}% difference"
+          fi
+          
+          # Send HTML report notification (only if Slack webhook is configured)
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            echo "📸 Sending HTML report notification to Slack..."
+            
+            # Send notification about the HTML report
+            curl -X POST -H 'Content-type: application/json' \
+              --data "{
+                \"text\": \"📸 Screenshot Comparison Report - ${{ inputs.environment }} (${{ inputs.contract_name }})\",
+                \"blocks\": [
+                  {
+                    \"type\": \"section\",
+                    \"text\": {
+                      \"type\": \"mrkdwn\",
+                      \"text\": \"*Screenshot Comparison Report Generated*\n\nA detailed HTML report has been created showing the visual differences between deployments.\n\n*Report includes:*\n• Side-by-side screenshot comparison\n• Visual difference overlay\n• Detailed metrics and analysis\n• Interactive legend and explanations\"
+                    }
+                  },
+                  {
+                    \"type\": \"actions\",
+                    \"elements\": [
+                      {
+                        \"type\": \"button\",
+                        \"text\": {
+                          \"type\": \"plain_text\",
+                          \"text\": \"View Report\"
+                        },
+                        \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
+                        \"style\": \"primary\"
+                      },
+                      {
+                        \"type\": \"button\",
+                        \"text\": {
+                          \"type\": \"plain_text\",
+                          \"text\": \"View Deployment\"
+                        },
+                        \"url\": \"${{ inputs.deploy_url }}\"
+                      }
+                    ]
+                  },
+                  {
+                    \"type\": \"context\",
+                    \"elements\": [
+                      {
+                        \"type\": \"mrkdwn\",
+                        \"text\": \"Difference: ${DIFF_PERCENT}% | Threshold: ${{ inputs.threshold }}% | Check Actions artifacts for HTML report\"
+                      }
+                    ]
+                  }
+                ]
+              }" \
+              "${{ secrets.SLACK_WEBHOOK_URL }}" || echo "HTML report Slack notification failed"
+          else
+            echo "📸 HTML report generated (Slack notification skipped - webhook not configured)"
+          fi
 
       - name: Upload current screenshot as artifact
         uses: actions/upload-artifact@v4
