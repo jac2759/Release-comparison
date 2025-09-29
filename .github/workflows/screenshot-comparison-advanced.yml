@@ -19,15 +19,15 @@ on:
         description: 'Build mode for artifact storage'
         required: true
         type: string
-    secrets:
-      SLACK_WEBHOOK_URL:
-        description: 'Slack webhook URL for notifications'
-        required: false
       threshold:
         description: 'Difference threshold percentage (default 20)'
         required: false
         type: number
         default: 20
+    secrets:
+      SLACK_WEBHOOK_URL:
+        description: 'Slack webhook URL for notifications'
+        required: false
 
 jobs:
   screenshot-comparison:
