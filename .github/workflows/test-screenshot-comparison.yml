@@ -30,7 +30,8 @@ jobs:
             environment: test-environment
             build_mode: Test
     uses: ./.github/workflows/screenshot-comparison-advanced.yml
-    secrets: inherit
+    secrets:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     with:
       deploy_url: ${{ matrix.deploy_url }}
       environment: ${{ matrix.environment }}
