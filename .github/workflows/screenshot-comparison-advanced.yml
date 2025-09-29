@@ -88,15 +88,21 @@ jobs:
         run: |
           # Try to download the previous screenshot from artifacts
           echo "Looking for previous screenshot: ${{ inputs.contract_name }}_${{ inputs.build_mode }}"
-          gh run download --repo ${{ github.repository }} --name "screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}" || echo "No previous screenshot found"
           
-          if [ -f "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" ]; then
-            mv "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" "screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
-            echo "previous_exists=true" >> $GITHUB_OUTPUT
-            echo "Previous screenshot found and renamed to previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
+          # Download the artifact (this will create the file if it exists)
+          if gh run download --repo ${{ github.repository }} --name "screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}"; then
+            # If download succeeded, rename the downloaded file to previous
+            if [ -f "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" ]; then
+              mv "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" "screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
+              echo "previous_exists=true" >> $GITHUB_OUTPUT
+              echo "Previous screenshot found and renamed to previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
+            else
+              echo "previous_exists=false" >> $GITHUB_OUTPUT
+              echo "Download succeeded but file not found - this will be the baseline"
+            fi
           else
             echo "previous_exists=false" >> $GITHUB_OUTPUT
-            echo "Previous screenshot file not found - this will be the baseline"
+            echo "No previous screenshot found - this will be the baseline"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
