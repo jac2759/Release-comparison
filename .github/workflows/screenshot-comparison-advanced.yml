@@ -201,10 +201,10 @@ jobs:
             echo "❌ Current file does NOT exist"
           fi
           echo "=== END COMPARE DEBUG ==="
-          node -e "
-          const fs = require('fs');
-          const PNG = require('pngjs').PNG;
-          const pixelmatch = require('pixelmatch');
+        node -e "
+        const fs = require('fs');
+        const PNG = require('pngjs').PNG;
+        const pixelmatch = require('pixelmatch').default || require('pixelmatch');
           
           const img1 = PNG.sync.read(fs.readFileSync('screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png'));
           const img2 = PNG.sync.read(fs.readFileSync('screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png'));
