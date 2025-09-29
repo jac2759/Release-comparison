@@ -130,7 +130,27 @@ jobs:
           
           if [ -n "$PREVIOUS_RUN_ID" ]; then
             echo "Downloading from previous run: $PREVIOUS_RUN_ID"
+            
+            # Temporarily rename current screenshot to avoid conflict
+            if [ -f "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" ]; then
+              echo "Temporarily renaming current screenshot to avoid download conflict"
+              mv "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" "screenshots/current_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
+            fi
+            
+            # Download the previous screenshot
             gh run download $PREVIOUS_RUN_ID --repo ${{ github.repository }} --name "screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}" --dir screenshots || echo "Download command failed"
+            
+            # Rename the downloaded file to previous and restore current
+            if [ -f "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" ]; then
+              echo "Renaming downloaded file to previous"
+              mv "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" "screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
+            fi
+            
+            # Restore the current screenshot
+            if [ -f "screenshots/current_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" ]; then
+              echo "Restoring current screenshot"
+              mv "screenshots/current_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
+            fi
           else
             echo "No previous completed run found"
           fi
@@ -142,23 +162,13 @@ jobs:
           echo "Files after download:"
           ls -la screenshots/ || echo "screenshots directory doesn't exist"
           
-          # Only proceed if we actually got a new file (download was successful)
-          if [ "$FILE_COUNT_AFTER" -gt "$FILE_COUNT_BEFORE" ]; then
-            echo "Download actually succeeded - new file was added"
-            # If download succeeded, rename the downloaded file to previous
-            if [ -f "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" ]; then
-              echo "Found downloaded file, renaming to previous..."
-              mv "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" "screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
-              echo "previous_exists=true" >> $GITHUB_OUTPUT
-              echo "Previous screenshot found and renamed to previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
-            else
-              echo "Download succeeded but file not found - this will be the baseline"
-              echo "previous_exists=false" >> $GITHUB_OUTPUT
-            fi
+          # Check if we have a previous screenshot file
+          if [ -f "screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" ]; then
+            echo "Previous screenshot found: previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
+            echo "previous_exists=true" >> $GITHUB_OUTPUT
           else
-            echo "Download did not add any new files - no previous screenshot found"
-            echo "previous_exists=false" >> $GITHUB_OUTPUT
             echo "No previous screenshot found - this will be the baseline"
+            echo "previous_exists=false" >> $GITHUB_OUTPUT
           fi
           
           echo "Final files in screenshots directory:"
