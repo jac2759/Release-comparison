@@ -82,28 +82,51 @@ jobs:
           echo "Screenshot step completed"
           ls -la screenshots/
 
+      - name: Debug before download
+        run: |
+          echo "=== DEBUG BEFORE DOWNLOAD ==="
+          echo "Files after screenshot step:"
+          ls -la screenshots/ || echo "screenshots directory doesn't exist"
+          echo "=== END DEBUG BEFORE DOWNLOAD ==="
+
       - name: Download previous screenshot
         id: download-previous
         continue-on-error: true
         run: |
           # Try to download the previous screenshot from artifacts
+          echo "=== DOWNLOAD PREVIOUS SCREENSHOT DEBUG ==="
           echo "Looking for previous screenshot: ${{ inputs.contract_name }}_${{ inputs.build_mode }}"
+          echo "Files before download:"
+          ls -la screenshots/ || echo "screenshots directory doesn't exist"
           
           # Download the artifact (this will create the file if it exists)
+          echo "Attempting to download artifact: screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}"
           if gh run download --repo ${{ github.repository }} --name "screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}"; then
+            echo "Download command succeeded"
+            echo "Files after download:"
+            ls -la screenshots/ || echo "screenshots directory doesn't exist"
+            
             # If download succeeded, rename the downloaded file to previous
             if [ -f "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" ]; then
+              echo "Found downloaded file, renaming to previous..."
               mv "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" "screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
               echo "previous_exists=true" >> $GITHUB_OUTPUT
               echo "Previous screenshot found and renamed to previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
             else
-              echo "previous_exists=false" >> $GITHUB_OUTPUT
               echo "Download succeeded but file not found - this will be the baseline"
+              echo "Files in screenshots directory:"
+              ls -la screenshots/ || echo "screenshots directory doesn't exist"
+              echo "previous_exists=false" >> $GITHUB_OUTPUT
             fi
           else
+            echo "Download command failed - no previous screenshot found"
             echo "previous_exists=false" >> $GITHUB_OUTPUT
             echo "No previous screenshot found - this will be the baseline"
           fi
+          
+          echo "Final files in screenshots directory:"
+          ls -la screenshots/ || echo "screenshots directory doesn't exist"
+          echo "=== END DOWNLOAD DEBUG ==="
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -111,10 +134,26 @@ jobs:
         id: compare
         if: steps.download-previous.outputs.previous_exists == 'true'
         run: |
+          echo "=== COMPARE SCREENSHOTS DEBUG ==="
+          echo "previous_exists output: ${{ steps.download-previous.outputs.previous_exists }}"
           echo "Files in screenshots directory:"
           ls -la screenshots/
           echo "Looking for previous file: screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
           echo "Looking for current file: screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
+          
+          # Check if files exist before trying to read them
+          if [ -f "screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" ]; then
+            echo "✅ Previous file exists"
+          else
+            echo "❌ Previous file does NOT exist"
+          fi
+          
+          if [ -f "screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png" ]; then
+            echo "✅ Current file exists"
+          else
+            echo "❌ Current file does NOT exist"
+          fi
+          echo "=== END COMPARE DEBUG ==="
           node -e "
           const fs = require('fs');
           const PNG = require('pngjs').PNG;
