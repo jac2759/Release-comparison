@@ -76,13 +76,24 @@ jobs:
         id: download-previous
         continue-on-error: true
         run: |
-          # Try to download the most recent screenshot from artifacts
+          # Skip if this is the first run (run_number = 1)
+          if [ "${{ github.run_number }}" -eq 1 ]; then
+            echo "previous_exists=false" >> $GITHUB_OUTPUT
+            echo "This is the first run, no previous screenshot to compare"
+            exit 0
+          fi
+          
+          # Try to download the previous screenshot from artifacts
+          echo "Looking for previous screenshot from run ${{ github.run_number-1 }}"
           gh run download --repo ${{ github.repository }} --name "screenshot-${{ github.run_number-1 }}" || echo "No previous screenshot found"
+          
           if [ -f "screenshots/current-${{ github.run_number-1 }}.png" ]; then
             mv "screenshots/current-${{ github.run_number-1 }}.png" "screenshots/previous.png"
             echo "previous_exists=true" >> $GITHUB_OUTPUT
+            echo "Previous screenshot found and renamed to previous.png"
           else
             echo "previous_exists=false" >> $GITHUB_OUTPUT
+            echo "Previous screenshot file not found"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
