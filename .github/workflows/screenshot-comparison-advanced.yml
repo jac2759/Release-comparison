@@ -56,21 +56,31 @@ jobs:
       - name: Take screenshot
         run: |
           mkdir -p screenshots
+          echo "Taking screenshot of: ${{ inputs.deploy_url }}"
+          echo "Saving to: screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
           node -e "
           const { chromium } = require('playwright');
           (async () => {
-            const browser = await chromium.launch();
-            const page = await browser.newPage();
-            await page.setViewportSize({ width: 1920, height: 1080 });
-            await page.goto('${{ inputs.deploy_url }}', { waitUntil: 'networkidle' });
-            await page.waitForTimeout(5000);
-            await page.screenshot({ 
-              path: 'screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png',
-              fullPage: true 
-            });
-            await browser.close();
+            try {
+              const browser = await chromium.launch();
+              const page = await browser.newPage();
+              await page.setViewportSize({ width: 1920, height: 1080 });
+              await page.goto('${{ inputs.deploy_url }}', { waitUntil: 'networkidle' });
+              await page.waitForTimeout(5000);
+              await page.screenshot({ 
+                path: 'screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png',
+                fullPage: true 
+              });
+              await browser.close();
+              console.log('Screenshot saved successfully');
+            } catch (error) {
+              console.error('Screenshot failed:', error);
+              process.exit(1);
+            }
           })();
           "
+          echo "Screenshot step completed"
+          ls -la screenshots/
 
       - name: Download previous screenshot
         id: download-previous
@@ -95,6 +105,10 @@ jobs:
         id: compare
         if: steps.download-previous.outputs.previous_exists == 'true'
         run: |
+          echo "Files in screenshots directory:"
+          ls -la screenshots/
+          echo "Looking for previous file: screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
+          echo "Looking for current file: screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png"
           node -e "
           const fs = require('fs');
           const PNG = require('pngjs').PNG;
