@@ -201,32 +201,33 @@ jobs:
             echo "❌ Current file does NOT exist"
           fi
           echo "=== END COMPARE DEBUG ==="
-        node -e "
-          const fs = require('fs');
-          const PNG = require('pngjs').PNG;
-          const pixelmatch = require('pixelmatch').default || require('pixelmatch');
           
-          const img1 = PNG.sync.read(fs.readFileSync('screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png'));
-          const img2 = PNG.sync.read(fs.readFileSync('screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png'));
-          
-          const { width, height } = img1;
-          const diff = new PNG({ width, height });
-          
-          const numDiffPixels = pixelmatch(img1.data, img2.data, diff.data, width, height, {
-            threshold: 0.1,
-            alpha: 0.1,
-            diffColor: [255, 0, 0],
-            diffColorAlt: [0, 255, 0]
-          });
-          
-          const totalPixels = width * height;
-          const diffPercent = Math.round((numDiffPixels / totalPixels) * 100);
-          
-          fs.writeFileSync('screenshots/diff.png', PNG.sync.write(diff));
-          
-          console.log('DIFF_PERCENT=' + diffPercent);
-          console.log('HAS_DIFFERENCE=' + (diffPercent > 0));
-        " >> $GITHUB_OUTPUT
+          node -e "
+            const fs = require('fs');
+            const PNG = require('pngjs').PNG;
+            const pixelmatch = require('pixelmatch').default || require('pixelmatch');
+            
+            const img1 = PNG.sync.read(fs.readFileSync('screenshots/previous_${{ inputs.contract_name }}_${{ inputs.build_mode }}.png'));
+            const img2 = PNG.sync.read(fs.readFileSync('screenshots/${{ inputs.contract_name }}_${{ inputs.build_mode }}.png'));
+            
+            const { width, height } = img1;
+            const diff = new PNG({ width, height });
+            
+            const numDiffPixels = pixelmatch(img1.data, img2.data, diff.data, width, height, {
+              threshold: 0.1,
+              alpha: 0.1,
+              diffColor: [255, 0, 0],
+              diffColorAlt: [0, 255, 0]
+            });
+            
+            const totalPixels = width * height;
+            const diffPercent = Math.round((numDiffPixels / totalPixels) * 100);
+            
+            fs.writeFileSync('screenshots/diff.png', PNG.sync.write(diff));
+            
+            console.log('DIFF_PERCENT=' + diffPercent);
+            console.log('HAS_DIFFERENCE=' + (diffPercent > 0));
+          " >> $GITHUB_OUTPUT
 
       - name: Check threshold
         id: threshold-check
