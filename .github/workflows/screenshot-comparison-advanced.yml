@@ -122,9 +122,18 @@ jobs:
             gh api repos/${{ github.repository }}/actions/runs/$run_id/artifacts --jq '.artifacts[] | {name: .name, size: .size_in_bytes}' || echo "Failed to get artifacts for run $run_id"
           done
           
-          # Try to download the artifact
+          # Try to download the artifact from the most recent completed run
           echo "Attempting download command:"
-          gh run download --repo ${{ github.repository }} --name "screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}" || echo "Download command failed"
+          
+          # Get the most recent completed run ID (excluding current run)
+          PREVIOUS_RUN_ID=$(gh run list --repo ${{ github.repository }} --status completed --limit 2 --json databaseId --jq '.[1].databaseId' 2>/dev/null || echo "")
+          
+          if [ -n "$PREVIOUS_RUN_ID" ]; then
+            echo "Downloading from previous run: $PREVIOUS_RUN_ID"
+            gh run download --repo ${{ github.repository }} --run-id $PREVIOUS_RUN_ID --name "screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}" || echo "Download command failed"
+          else
+            echo "No previous completed run found"
+          fi
           
           # Store the file count after download
           FILE_COUNT_AFTER=$(ls screenshots/*.png 2>/dev/null | wc -l)
