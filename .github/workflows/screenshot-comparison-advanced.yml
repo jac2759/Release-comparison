@@ -19,15 +19,15 @@ on:
         description: 'Build mode for artifact storage'
         required: true
         type: string
+      slack_webhook_url:
+        description: 'Slack webhook URL for notifications'
+        required: false
+        type: string
       threshold:
         description: 'Difference threshold percentage (default 20)'
         required: false
         type: number
         default: 20
-    secrets:
-      SLACK_WEBHOOK_URL:
-        description: 'Slack webhook URL for notifications'
-        required: true
 
 jobs:
   screenshot-comparison:
@@ -266,7 +266,7 @@ jobs:
           DIFF_PERCENT="${{ steps.compare.outputs.diff_percent }}"
           
           # Check if Slack webhook URL is available
-          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+          if [ -n "${{ inputs.slack_webhook_url }}" ]; then
             echo "📢 Sending Slack notification..."
             
             # Send main notification
@@ -296,14 +296,14 @@ jobs:
                   }
                 ]
               }" \
-              "${{ secrets.SLACK_WEBHOOK_URL }}" || echo "Slack notification failed"
+              "${{ inputs.slack_webhook_url }}" || echo "Slack notification failed"
           else
             echo "⚠️ SLACK_WEBHOOK_URL secret not configured - skipping Slack notification"
             echo "Visual change detected: ${DIFF_PERCENT}% difference"
           fi
           
           # Send HTML report notification (only if Slack webhook is configured)
-          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+          if [ -n "${{ inputs.slack_webhook_url }}" ]; then
             echo "📸 Sending HTML report notification to Slack..."
             
             # Send notification about the HTML report
@@ -351,7 +351,7 @@ jobs:
                   }
                 ]
               }" \
-              "${{ secrets.SLACK_WEBHOOK_URL }}" || echo "HTML report Slack notification failed"
+              "${{ inputs.slack_webhook_url }}" || echo "HTML report Slack notification failed"
           else
             echo "📸 HTML report generated (Slack notification skipped - webhook not configured)"
           fi
