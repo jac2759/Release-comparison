@@ -37,6 +37,6 @@ jobs:
       environment: ${{ matrix.environment }}
       contract_name: ${{ matrix.contract }}
       build_mode: ${{ inputs.build_mode || 'Test' }}
-      slack_webhook_url: ""
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
       threshold: ${{ inputs.threshold || 10 }}
 # Updated Mon Sep 29 10:27:15 BST 2025
