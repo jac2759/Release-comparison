@@ -107,7 +107,24 @@ jobs:
           echo "File count before download: $FILE_COUNT_BEFORE"
           
           # Try to download the artifact
-          gh run download --repo ${{ github.repository }} --name "screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}" || true
+          echo "Repository: ${{ github.repository }}"
+          echo "Current run number: ${{ github.run_number }}"
+          echo "Looking for artifact name: screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}"
+          
+          # List recent runs to see what's available
+          echo "Recent workflow runs:"
+          gh run list --repo ${{ github.repository }} --limit 5 || echo "Failed to list runs"
+          
+          # List artifacts from recent runs
+          echo "Artifacts from recent runs:"
+          for run_id in $(gh run list --repo ${{ github.repository }} --limit 3 --json databaseId --jq '.[].databaseId'); do
+            echo "Run $run_id artifacts:"
+            gh api repos/${{ github.repository }}/actions/runs/$run_id/artifacts --jq '.artifacts[] | {name: .name, size: .size_in_bytes}' || echo "Failed to get artifacts for run $run_id"
+          done
+          
+          # Try to download the artifact
+          echo "Attempting download command:"
+          gh run download --repo ${{ github.repository }} --name "screenshot-${{ inputs.contract_name }}-${{ inputs.build_mode }}" || echo "Download command failed"
           
           # Store the file count after download
           FILE_COUNT_AFTER=$(ls screenshots/*.png 2>/dev/null | wc -l)
